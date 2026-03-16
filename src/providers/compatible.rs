@@ -65,7 +65,7 @@ impl OpenAiCompatibleProvider {
         auth_style: AuthStyle,
     ) -> Self {
         Self::new_with_options(
-            name, base_url, credential, auth_style, false, true, None, false,
+            name, base_url, credential, auth_style, false, true, None, false, true,
         )
     }
 
@@ -85,6 +85,7 @@ impl OpenAiCompatibleProvider {
             true,
             None,
             false,
+            false,  // native_tool_calling: default to false for custom endpoints
         )
     }
 
@@ -97,7 +98,7 @@ impl OpenAiCompatibleProvider {
         auth_style: AuthStyle,
     ) -> Self {
         Self::new_with_options(
-            name, base_url, credential, auth_style, false, false, None, false,
+            name, base_url, credential, auth_style, false, false, None, false, true,
         )
     }
 
@@ -121,6 +122,7 @@ impl OpenAiCompatibleProvider {
             true,
             Some(user_agent),
             false,
+            true,
         )
     }
 
@@ -141,6 +143,7 @@ impl OpenAiCompatibleProvider {
             true,
             Some(user_agent),
             false,
+            true,
         )
     }
 
@@ -153,7 +156,7 @@ impl OpenAiCompatibleProvider {
         auth_style: AuthStyle,
     ) -> Self {
         Self::new_with_options(
-            name, base_url, credential, auth_style, false, false, None, true,
+            name, base_url, credential, auth_style, false, false, None, true, false,
         )
     }
 
@@ -166,6 +169,7 @@ impl OpenAiCompatibleProvider {
         supports_responses_fallback: bool,
         user_agent: Option<&str>,
         merge_system_into_user: bool,
+        native_tool_calling: bool,
     ) -> Self {
         Self {
             name: name.to_string(),
@@ -176,7 +180,7 @@ impl OpenAiCompatibleProvider {
             supports_responses_fallback,
             user_agent: user_agent.map(ToString::to_string),
             merge_system_into_user,
-            native_tool_calling: !merge_system_into_user,
+            native_tool_calling,
             timeout_secs: 120,
             extra_headers: std::collections::HashMap::new(),
             api_path: None,
@@ -202,6 +206,14 @@ impl OpenAiCompatibleProvider {
     /// When set, replaces the default `/chat/completions` path.
     pub fn with_api_path(mut self, api_path: Option<String>) -> Self {
         self.api_path = api_path;
+        self
+    }
+
+    /// Override the native tool calling support flag.
+    /// Use this to disable native tool calling for custom endpoints that
+    /// don't support it, forcing tool instructions to be injected into the system prompt.
+    pub fn with_native_tool_calling(mut self, native_tool_calling: bool) -> Self {
+        self.native_tool_calling = native_tool_calling;
         self
     }
 

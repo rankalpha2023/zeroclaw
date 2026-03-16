@@ -17,10 +17,21 @@ use std::collections::HashSet;
 use std::fmt::Write;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
+
+/// Debug flag: Enable full request logging
+/// Set environment variable ZERCLAW_DEBUG_FULL_REQUEST=1 to enable
+static DEBUG_FULL_REQUEST: LazyLock<AtomicBool> = LazyLock::new(|| {
+    AtomicBool::new(
+        std::env::var("ZERCLAW_DEBUG_FULL_REQUEST")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false),
+    )
+});
 
 /// Minimum characters per chunk when relaying LLM text to a streaming draft.
 const STREAM_CHUNK_MIN_CHARS: usize = 80;
@@ -2373,6 +2384,31 @@ pub(crate) async fn run_tool_call_loop(
             model: model.to_string(),
             messages_count: history.len(),
         });
+        
+        // Build request payload with optional full message logging
+        let mut request_payload = serde_json::json!({
+            "iteration": iteration + 1,
+            "messages_count": history.len(),
+        });
+        
+        // If debug mode is enabled, record full message content
+        if DEBUG_FULL_REQUEST.load(Ordering::Relaxed) {
+            // Record prepared messages (actual messages sent to provider)
+            request_payload["prepared_messages"] = serde_json::to_value(&prepared_messages.messages)
+                .unwrap_or_else(|e| serde_json::json!({"error": format!("Failed to serialize prepared_messages: {}", e)}));
+            
+            // Record original history
+            request_payload["history"] = serde_json::to_value(&history)
+                .unwrap_or_else(|e| serde_json::json!({"error": format!("Failed to serialize history: {}", e)}));
+            
+            // Record tool configuration
+            request_payload["use_native_tools"] = serde_json::Value::Bool(use_native_tools);
+            if use_native_tools {
+                request_payload["tool_specs"] = serde_json::to_value(&tool_specs)
+                    .unwrap_or_else(|e| serde_json::json!({"error": format!("Failed to serialize tool_specs: {}", e)}));
+            }
+        }
+        
         runtime_trace::record_event(
             "llm_request",
             Some(channel_name),
@@ -2381,10 +2417,7 @@ pub(crate) async fn run_tool_call_loop(
             Some(&turn_id),
             None,
             None,
-            serde_json::json!({
-                "iteration": iteration + 1,
-                "messages_count": history.len(),
-            }),
+            request_payload,
         );
 
         let llm_started_at = Instant::now();

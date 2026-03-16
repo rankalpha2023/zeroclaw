@@ -1433,13 +1433,21 @@ fn create_provider_with_url_and_options(
                 "Custom provider",
                 "custom:https://your-api.com",
             )?;
-            Ok(compat(OpenAiCompatibleProvider::new_with_vision(
+            
+            // Create provider with vision support but disable native tool calling.
+            // Custom endpoints default to prompt-based tool instructions for better
+            // compatibility with self-hosted LLM servers (llama.cpp, Ollama, etc.)
+            // and XmlToolDispatcher.
+            // new_with_vision now sets native_tool_calling = false by default
+            let provider = OpenAiCompatibleProvider::new_with_vision(
                 "Custom",
                 &base_url,
                 key,
                 AuthStyle::Bearer,
-                true,
-            )))
+                true,  // supports_vision
+            );
+            
+            Ok(compat(provider))
         }
 
         // ── Anthropic-compatible custom endpoints ───────────

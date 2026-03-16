@@ -1,5 +1,6 @@
 mod config_persistence;
 mod config_schema;
+mod custom_provider_fix;
 mod dockerignore_test;
 mod gateway;
 mod otel_dependency_feature_regression;
