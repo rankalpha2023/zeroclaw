@@ -573,6 +573,33 @@ async fn turn_recovers_from_tool_error() {
     );
 }
 
+#[tokio::test]
+async fn turn_handles_malformed_tool_call_without_opening_bracket() {
+    let provider = Box::new(ScriptedProvider::new(vec![
+        text_response("tool_call>{\"name\": \"echo\", \"arguments\": {\"message\": \"test\"}}</tool_call>")
+    ]));
+
+    let mut agent = build_agent_with(
+        provider,
+        vec![Box::new(EchoTool)],
+        Box::new(XmlToolDispatcher),
+    );
+
+    let response = agent.turn("run echo").await.unwrap();
+    assert!(
+        !response.is_empty(),
+        "Expected non-empty response after malformed tool call recovery"
+    );
+}
+
+#[test]
+fn parse_tool_calls_handles_malformed_tool_call_without_opening_bracket() {
+    let input = "tool_call>{\"name\": \"echo\", \"arguments\": {\"message\": \"test\"}}</tool_call>";
+    let (text, calls) = parse_tool_calls(input);
+    assert!(!calls.is_empty(), "Expected to parse malformed tool call");
+    assert_eq!(calls[0].name, "echo", "Expected tool name to be echo");
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 7. Provider error propagation
 // ═══════════════════════════════════════════════════════════════════════════

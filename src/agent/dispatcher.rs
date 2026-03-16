@@ -77,6 +77,25 @@ impl XmlToolDispatcher {
             }
         }
 
+        // Check for malformed tool_call> without opening < at the beginning
+        if !calls.is_empty() || remaining.trim().is_empty() {
+            // If we already found valid tool calls or nothing left, no need to check
+        } else if let Some(tool_call_start) = remaining.trim().find("tool_call>") {
+            // Check if it's at the beginning (after trimming whitespace)
+            let trimmed = remaining.trim();
+            if tool_call_start == 0 {
+                // Found malformed tool_call> at the beginning, fix it
+                let fixed = format!("<{}", trimmed);
+                // Recursively parse the fixed content
+                let (fixed_text, fixed_calls) = Self::parse_xml_tool_calls(&fixed);
+                if !fixed_text.is_empty() {
+                    text_parts.push(fixed_text);
+                }
+                calls.extend(fixed_calls);
+                remaining = "";
+            }
+        }
+
         if !remaining.trim().is_empty() {
             text_parts.push(remaining.trim().to_string());
         }

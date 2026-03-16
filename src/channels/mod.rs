@@ -475,6 +475,14 @@ fn strip_tool_call_tags(message: &str) -> String {
         break;
     }
 
+    // 容错处理：检查是否存在 tool_call> 格式
+    if remaining.trim().starts_with("tool_call>") {
+        // 修复格式：添加缺少的 <
+        let fixed = format!("<{}", remaining.trim());
+        // 递归处理修复后的字符串
+        return strip_tool_call_tags(&fixed);
+    }
+
     if !remaining.is_empty() {
         kept_segments.push(remaining.to_string());
     }

@@ -24,10 +24,10 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 /// Debug flag: Enable full request logging
-/// Set environment variable ZERCLAW_DEBUG_FULL_REQUEST=1 to enable
+/// Set environment variable ZEROCLAW_DEBUG_FULL_REQUEST=1 to enable
 static DEBUG_FULL_REQUEST: LazyLock<AtomicBool> = LazyLock::new(|| {
     AtomicBool::new(
-        std::env::var("ZERCLAW_DEBUG_FULL_REQUEST")
+        std::env::var("ZEROCLAW_DEBUG_FULL_REQUEST")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false),
     )
@@ -1858,6 +1858,21 @@ fn parse_tool_calls(response: &str) -> (String, Vec<ParsedToolCall>) {
             if !cleaned_text.trim().is_empty() {
                 text_parts.push(cleaned_text.trim().to_string());
             }
+            remaining = "";
+        }
+    }
+
+    // 容错处理：检查是否存在 tool_call> 格式
+    if calls.is_empty() {
+        let trimmed = remaining.trim();
+        if trimmed.starts_with("tool_call>") {
+            // 修复格式：添加缺少的 <
+            let fixed = format!("<{}", trimmed);
+            let (fixed_text, fixed_calls) = parse_tool_calls(&fixed);
+            if !fixed_text.is_empty() {
+                text_parts.push(fixed_text);
+            }
+            calls.extend(fixed_calls);
             remaining = "";
         }
     }

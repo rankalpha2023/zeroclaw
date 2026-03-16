@@ -308,8 +308,269 @@ async fn deliver_if_configured(config: &Config, job: &CronJob, output: &str) -> 
         .to
         .as_deref()
         .ok_or_else(|| anyhow::anyhow!("delivery.to is required for announce mode"))?;
+    
+    // 验证并修正接收者ID
+    let resolved_target = resolve_and_fix_recipient(config, channel, target).await?;
 
-    deliver_announcement(config, channel, target, output).await
+    deliver_announcement(config, channel, &resolved_target, output).await
+}
+
+async fn resolve_and_fix_recipient(config: &Config, channel: &str, target: &str) -> Result<String> {
+    // 检查接收者ID是否有效
+    if is_valid_recipient(config, channel, target).await {
+        return Ok(target.to_string());
+    }
+    
+    // 如果无效，获取当前的接收者ID
+    if let Some(current_recipient) = get_current_recipient(config, channel).await {
+        return Ok(current_recipient);
+    }
+    
+    // 如果都失败了，返回错误
+    Err(anyhow::anyhow!("No valid recipient found for channel: {}", channel))
+}
+
+async fn is_valid_recipient(config: &Config, channel: &str, target: &str) -> bool {
+    // 实现接收者ID验证逻辑
+    // 根据不同频道类型，验证接收者ID是否有效
+    match channel {
+        "telegram" => {
+            // 验证Telegram聊天ID是否有效
+            if let Some(tg_config) = &config.channels_config.telegram {
+                // 检查是否在允许的用户列表中
+                if !tg_config.allowed_users.is_empty() {
+                    return tg_config.allowed_users.contains(&target.to_string());
+                }
+                // 如果没有设置allowed_users，认为ID格式正确即为有效
+                return !target.is_empty();
+            }
+        }
+        "discord" => {
+            // 验证Discord频道ID是否有效
+            if let Some(dc_config) = &config.channels_config.discord {
+                // 检查是否在允许的用户列表中
+                if !dc_config.allowed_users.is_empty() {
+                    return dc_config.allowed_users.contains(&target.to_string());
+                }
+                // 如果没有设置allowed_users，认为ID格式正确即为有效
+                return !target.is_empty();
+            }
+        }
+        "slack" => {
+            // 验证Slack频道是否有效
+            if let Some(sl_config) = &config.channels_config.slack {
+                // 检查是否在允许的用户列表中
+                if !sl_config.allowed_users.is_empty() {
+                    return sl_config.allowed_users.contains(&target.to_string());
+                }
+                // 如果没有设置allowed_users，认为ID格式正确即为有效
+                return !target.is_empty();
+            }
+        }
+        "mattermost" => {
+            // 验证Mattermost频道是否有效
+            if let Some(mm_config) = &config.channels_config.mattermost {
+                // 检查是否在允许的用户列表中
+                if !mm_config.allowed_users.is_empty() {
+                    return mm_config.allowed_users.contains(&target.to_string());
+                }
+                // 如果没有设置allowed_users，认为ID格式正确即为有效
+                return !target.is_empty();
+            }
+        }
+        "signal" => {
+            // 验证Signal群组是否有效
+            if let Some(sg_config) = &config.channels_config.signal {
+                // 检查是否在允许的发送者列表中
+                if !sg_config.allowed_from.is_empty() {
+                    return sg_config.allowed_from.contains(&target.to_string());
+                }
+                // 如果没有设置allowed_from，认为ID格式正确即为有效
+                return !target.is_empty();
+            }
+        }
+        "matrix" => {
+            // 验证Matrix房间是否有效
+            if let Some(_mx_config) = &config.channels_config.matrix {
+                // 简单验证房间ID格式
+                return !target.is_empty();
+            }
+        }
+        "imessage" => {
+            // 验证iMessage联系人是否有效
+            if let Some(im_config) = &config.channels_config.imessage {
+                // 检查是否在允许的联系人列表中
+                if !im_config.allowed_contacts.is_empty() {
+                    return im_config.allowed_contacts.contains(&target.to_string());
+                }
+                // 如果没有设置allowed_contacts，认为ID格式正确即为有效
+                return !target.is_empty();
+            }
+        }
+        "whatsapp" => {
+            // 验证WhatsApp联系人是否有效
+            if let Some(wa_config) = &config.channels_config.whatsapp {
+                // 检查是否在允许的号码列表中
+                if !wa_config.allowed_numbers.is_empty() {
+                    return wa_config.allowed_numbers.contains(&target.to_string());
+                }
+                // 如果没有设置allowed_numbers，认为ID格式正确即为有效
+                return !target.is_empty();
+            }
+        }
+        "linq" => {
+            // 验证Linq联系人是否有效
+            if let Some(_lq_config) = &config.channels_config.linq {
+                // 简单验证联系人ID格式
+                return !target.is_empty();
+            }
+        }
+        "dingtalk" => {
+            // 验证DingTalk联系人是否有效
+            if let Some(_dt_config) = &config.channels_config.dingtalk {
+                // 简单验证联系人ID格式
+                return !target.is_empty();
+            }
+        }
+        "email" => {
+            // 验证Email地址是否有效
+            if let Some(_email_config) = &config.channels_config.email {
+                // 简单验证邮箱格式
+                return !target.is_empty() && target.contains('@');
+            }
+        }
+        "irc" => {
+            // 验证IRC频道是否有效
+            if let Some(_irc_config) = &config.channels_config.irc {
+                // 简单验证频道格式
+                return !target.is_empty();
+            }
+        }
+        "lark" => {
+            // 验证Lark联系人是否有效
+            #[cfg(feature = "channel-lark")]
+            {
+                if let Some(_lark_config) = &config.channels_config.lark {
+                    // 简单验证联系人ID格式
+                    return !target.is_empty();
+                }
+            }
+        }
+        "wati" => {
+            // 验证Wati联系人是否有效
+            if let Some(_wati_config) = &config.channels_config.wati {
+                // 简单验证联系人ID格式
+                return !target.is_empty();
+            }
+        }
+        "wecom" => {
+            // 验证WeCom联系人是否有效
+            if let Some(_wecom_config) = &config.channels_config.wecom {
+                // 简单验证联系人ID格式
+                return !target.is_empty();
+            }
+        }
+        "clawdtalk" => {
+            // 验证ClawdTalk联系人是否有效
+            if let Some(_clawdtalk_config) = &config.channels_config.clawdtalk {
+                // 简单验证联系人ID格式
+                return !target.is_empty();
+            }
+        }
+        "cli" => {
+            // CLI频道不需要验证，直接返回有效
+            return true;
+        }
+        _ => {
+            // 其他频道类型，简单验证
+            return !target.is_empty();
+        }
+    }
+    
+    false
+}
+
+async fn get_current_recipient(config: &Config, channel: &str) -> Option<String> {
+    // 获取当前的接收者ID
+    // 这里根据不同频道类型，返回配置的默认接收者
+    match channel {
+        "telegram" => {
+            // 返回Telegram第一个允许的用户ID
+            config.channels_config.telegram.as_ref()?.allowed_users.first().cloned()
+        }
+        "discord" => {
+            // 返回Discord第一个允许的用户ID
+            config.channels_config.discord.as_ref()?.allowed_users.first().cloned()
+        }
+        "slack" => {
+            // 返回Slack频道ID
+            config.channels_config.slack.as_ref()?.channel_id.clone()
+        }
+        "mattermost" => {
+            // 返回Mattermost频道ID
+            config.channels_config.mattermost.as_ref()?.channel_id.clone()
+        }
+        "signal" => {
+            // 返回Signal群组ID
+            config.channels_config.signal.as_ref()?.group_id.clone()
+        }
+        "matrix" => {
+            // 返回Matrix房间ID
+            Some(config.channels_config.matrix.as_ref()?.room_id.clone())
+        }
+        "imessage" => {
+            // 返回iMessage第一个允许的联系人
+            config.channels_config.imessage.as_ref()?.allowed_contacts.first().cloned()
+        }
+        "whatsapp" => {
+            // 返回WhatsApp第一个允许的号码
+            config.channels_config.whatsapp.as_ref()?.allowed_numbers.first().cloned()
+        }
+        "linq" => {
+            // 返回Linq第一个允许的发送者
+            config.channels_config.linq.as_ref()?.allowed_senders.first().cloned()
+        }
+        "dingtalk" => {
+            // 返回DingTalk第一个允许的用户
+            config.channels_config.dingtalk.as_ref()?.allowed_users.first().cloned()
+        }
+        "email" => {
+            // 返回Email第一个允许的发送者
+            config.channels_config.email.as_ref()?.allowed_senders.first().cloned()
+        },
+        "irc" => {
+            // 返回IRC第一个频道
+            config.channels_config.irc.as_ref()?.channels.first().cloned()
+        }
+        "lark" => {
+            // 返回Lark默认联系人
+            #[cfg(feature = "channel-lark")]
+            {
+                None
+            }
+            #[cfg(not(feature = "channel-lark"))]
+            {
+                None
+            }
+        }
+        "wati" => {
+            // 返回Wati第一个允许的号码
+            config.channels_config.wati.as_ref()?.allowed_numbers.first().cloned()
+        }
+        "wecom" => {
+            // 返回WeCom第一个允许的用户
+            config.channels_config.wecom.as_ref()?.allowed_users.first().cloned()
+        }
+        "clawdtalk" => {
+            // 返回ClawdTalk第一个允许的目的地
+            config.channels_config.clawdtalk.as_ref()?.allowed_destinations.first().cloned()
+        }
+        "cli" => {
+            // CLI频道返回默认值
+            Some("cli".to_string())
+        }
+        _ => None,
+    }
 }
 
 pub(crate) async fn deliver_announcement(
